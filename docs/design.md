@@ -51,12 +51,33 @@ From other tools:
 
 | Tool | Borrowed |
 |---|---|
+| Microsoft Conductor | Closest match. See [below](#closest-prior-art-microsoft-conductor). |
 | AWS Step Functions | Verdict routing (`Choice`), `Wait`, explicit end states |
 | Archon | Typed outputs checked at validate time; `interactive` steps; worktree per run |
 | Goose recipes | `ask` levels on inputs; shell checks as an oracle |
 | GitHub Actions | `if`, `with`, `outputs`, environment approvals as gates |
 | Temporal | A long wait is saved state plus an outside wake-up |
 | Taskfile | `guard` (Taskfile's `status:`): skip work that is already done |
+
+## Closest prior art: Microsoft Conductor
+
+[Conductor](https://github.com/microsoft/conductor) ([announcement](https://opensource.microsoft.com/blog/2026/05/14/conductor-deterministic-orchestration-for-multi-agent-ai-workflows/), MIT, May 2026) is the nearest tool to tablature. It is a CLI that runs YAML flows of agents with a deterministic engine.
+
+**What it has that tablature also has:** routes between steps (Jinja2 conditions, first match wins), loops with iteration caps and timeouts, parallel groups, script steps, human gates, MCP tools, reusable sub-workflows, `conductor validate`, and a flow graph in a web dashboard. It runs Claude and Copilot models.
+
+**What tablature adds (as of this draft):**
+
+| Need | Conductor | Tablature |
+|---|---|---|
+| Step runs an existing agent skill (for example `github-pr-review`) | A step is a model + prompt that Conductor calls | `skill:` runs in the user's agent harness, with its skills, MCP logins, and worktrees |
+| Swap an integration for the whole team | Edit each workflow | `use:` + a shared `actions.yaml` |
+| Wait 24h, then continue | Wait step + polling loop; no documented resume | `wait:` saves state, books a wake-up, ends the session |
+| Safe re-run after a crash | Not documented | `effect: none / idempotent / once`, `guard` |
+| Ticket status follows the flow | No | `track:` |
+
+**What Conductor does better:** its routing is deterministic code. The tablature v0.1 runner is an agent that follows `SKILL.md`, so it can drift. To keep flows consistent, the tablature runner core (state, routing, `max`, waits) should become a small deterministic program. The agent then does only the agentic steps.
+
+**Plan:** port `ticket-flow.tab` to Conductor YAML and list the gaps. If the gaps are only waits, resume, actions, and skills, tablature can compile to Conductor, or add those features upstream. If Conductor cannot drive agent-harness sessions well, keep tablature and build the deterministic runner next.
 
 ## Goose and goosetown
 
@@ -72,7 +93,7 @@ Tablature fits beside them:
 
 1. **Parallel conflicts.** `parallel` branches must not change the same files. Should the validator check `in` dirs, or should each branch get its own worktree?
 2. **Review ledger.** Should the runner keep rejected findings per run, and pass them to every review step?
-3. **Runner.** v0.1 is a Claude Code skill (`skills/tablature`). Later, a small CLI for `validate`, `resume`, and `status`, so checks do not need a model.
+3. **Runner.** v0.1 is a Claude Code skill (`skills/tablature`). Next: a small deterministic CLI that owns state, routing, and waits, and asks the agent to do only the agentic steps. Or compile to Conductor (see above).
 4. **Wake-up backend.** Claude Code `/schedule`, cron, or `goose schedule`. Pick one default.
 5. **Action discovery.** Today a tab names its actions file. Should there also be a user-level default (`~/.tablature/actions.yaml`) that a repo file can override?
 6. **Merge policy.** `ticket-flow` gates merge with `confirm`. Should an approved PR with no comments merge without asking?
