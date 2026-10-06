@@ -10,7 +10,7 @@ inputs:
 
 vars:
   host:  demo-box
-  image: replay/bff
+  image: acme/api
 
 requires:
   tools: [git, gh, docker, ssh]

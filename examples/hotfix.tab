@@ -12,7 +12,7 @@ inputs:
 vars:
   demo:  demo-box
   prod:  prod-box
-  image: replay/bff
+  image: acme/api
 
 requires:
   tools: [git, gh, docker, ssh]

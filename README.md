@@ -116,7 +116,7 @@ ln -s "$PWD/skills/tablature" ~/.claude/skills/tablature
 ln -s "$PWD/skills/mermaidify" ~/.claude/skills/mermaidify
 ```
 
-Then in Claude Code: `/tablature run examples/ticket-flow.tab ticket=RP-123`, or `/mermaidify examples/hotfix.tab`.
+Then in Claude Code: `/tablature run examples/ticket-flow.tab ticket=PROJ-123`, or `/mermaidify examples/hotfix.tab`.
 
 ## License
 

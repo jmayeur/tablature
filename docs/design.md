@@ -33,19 +33,19 @@ Prefer the lowest row that works, from the top: a script is cheaper and more pre
 
 ## Where these came from
 
-From the replay projects:
+From running agent flows in practice:
 
 | Lesson | Source | Becomes |
 |---|---|---|
-| A posted PR review cannot be deleted. Re-runs must check first. | `github-pr-review` skill | `effect: once`, `guard` |
-| `github-pr-comments` is built to re-run. | `github-pr-comments` skill | `effect: idempotent` |
-| Ask before you open a PR, merge, or post. | memory rules | `gate: confirm` |
-| "No checks" means never, not pending. A crashed test is not green. | memory rules, planning playbook | `inconclusive` status |
-| Poll → stage → apply → bake → revert, with a status file. | Pylon runtime updates | `undo`, `state.json` |
-| A ledger of rejected review findings makes the loop converge. | `.self-review-decisions.md` | Open: per-run ledger (see below) |
-| A documented tool (beads, acli) was not installed. | memory notes | `requires` |
+| A posted PR review cannot be deleted. Re-runs must check first. | PR review skill | `effect: once`, `guard` |
+| A PR comment handler can be built to re-run safely. | PR comments skill | `effect: idempotent` |
+| Ask before you open a PR, merge, or post. | team rules | `gate: confirm` |
+| "No checks" means never, not pending. A crashed test is not green. | team rules | `inconclusive` status |
+| Poll → stage → apply → bake → revert, with a status file. | image update flows | `undo`, `state.json` |
+| A ledger of rejected review findings makes the loop converge. | self-review practice | Open: per-run ledger (see below) |
+| A documented tool was not installed. | team notes | `requires` |
 | Shared `/tmp` paths collide across runs. | PR skills | per-run `scratch/` |
-| One worktree per ticket. | `.claude/worktrees/<ticket>` | `in:` |
+| One worktree per ticket. | worktree conventions | `in:` |
 
 From other tools:
 
