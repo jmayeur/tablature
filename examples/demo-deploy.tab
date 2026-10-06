@@ -1,0 +1,72 @@
+tab: 0.1
+name: demo-deploy
+about: Build a ticket fix, measure it on the demo box, and open a PR with the results.
+
+actions: ./actions.yaml
+
+inputs:
+  ticket: {type: string, ask: required}
+  sample: {type: duration, default: 10m}
+
+vars:
+  host:  demo-box
+  image: replay/bff
+
+requires:
+  tools: [git, gh, docker, ssh]
+
+track:
+  ticket: $ticket.id
+  via: ticket.move
+  status: {fix: In Progress, pr: In Review}
+
+steps:
+  ticket:
+    use: ticket.get
+    with: {id: $inputs.ticket}
+
+  fix:
+    tab: ./fix.tab
+    with: {ticket: $ticket.id}
+
+  image:
+    in: $fix.worktree
+    run: docker build -t $vars.image:$ticket.id . && docker save $vars.image:$ticket.id | ssh $vars.host docker load
+    timeout: 20m
+
+  before:
+    use: demo.sample
+    with: {host: $vars.host, for: $inputs.sample}
+
+  deploy:
+    gate: confirm
+    run: ssh $vars.host "deploy $vars.image:$ticket.id"
+    undo: ssh $vars.host "deploy --previous"
+
+  after:
+    use: demo.sample
+    with: {host: $vars.host, for: $inputs.sample}
+
+  compare:
+    do: Compare the two samples. Report a verdict and a short stats table.
+    with: {before: $before.stats, after: $after.stats}
+    out: {verdict: [better, same, worse], table: string}
+    route: {worse: decide}
+    next: pr
+
+  decide:
+    ask: "The patch made things worse:\n$compare.table\nRoll back, or open a PR anyway?"
+    options: [rollback, pr]
+    route: {rollback: rollback, pr: pr}
+
+  rollback:
+    revert: deploy
+    next: end
+
+  pr:
+    in: $fix.worktree
+    gate: confirm
+    run: |
+      git push -u origin HEAD
+      gh pr create --title "$ticket.id: $ticket.title" --body "$compare.table"
+    out: {url: string}

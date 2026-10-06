@@ -1,0 +1,142 @@
+tab: 0.1
+name: hotfix
+about: Ship a prod fix fast. Sample the demo box while the fix is built.
+
+actions: ./actions.yaml
+
+inputs:
+  ticket:   {type: string, ask: required}
+  baseline: {type: duration, default: 20m}
+  sample:   {type: duration, default: 10m}
+
+vars:
+  demo:  demo-box
+  prod:  prod-box
+  image: replay/bff
+
+requires:
+  tools: [git, gh, docker, ssh]
+
+rules:
+  - Make the smallest change that fixes the bug. Do not refactor.
+  - Write a failing test before the fix (red-green).
+  - Code comments use Simplified Technical English (ASD-STE100).
+
+track:
+  ticket: $ticket.id
+  via: ticket.move
+  status: {start: In Progress, pr: In Review, prod: Done}
+
+steps:
+  ticket:
+    use: ticket.get
+    with: {id: $inputs.ticket}
+
+  claim:
+    use: ticket.claim
+    with: {id: $ticket.id}
+
+  # Two branches run at the same time. The flow waits for both.
+  start:
+    parallel:
+      baseline:
+        before:
+          use: demo.sample
+          with: {host: $vars.demo, for: $inputs.baseline}
+      fix:
+        build:
+          tab: ./fix.tab
+          with: {ticket: $ticket.id, branch: hotfix/$ticket.id}
+        image:
+          in: $build.worktree
+          run: docker build -t $vars.image:hotfix-$ticket.id .
+          timeout: 20m
+    need: all
+    timeout: 2h
+
+  demo:
+    gate: confirm
+    run: |
+      docker save $vars.image:hotfix-$ticket.id | ssh $vars.demo docker load
+      ssh $vars.demo "deploy $vars.image:hotfix-$ticket.id"
+    undo: ssh $vars.demo "deploy --previous"
+
+  after:
+    use: demo.sample
+    with: {host: $vars.demo, for: $inputs.sample}
+
+  compare:
+    do: Compare the two samples. Give a verdict and a short stats table.
+    with: {before: $before.stats, after: $after.stats}
+    out: {verdict: [better, same, worse], table: string}
+    route: {worse: undo-demo}
+
+  pr:
+    in: $build.worktree
+    gate: confirm
+    run: |
+      git push -u origin HEAD
+      gh pr create --label hotfix --title "HOTFIX $ticket.id: $ticket.title" --body "$compare.table"
+      gh pr view --json number,url > "$TAB_OUT"
+    out: {number: int, url: string}
+
+  # Self-review and the human review request run at the same time.
+  review:
+    parallel:
+      self:
+        self-review:
+          use: pr.review
+          with: {pr: $pr.number}
+      people:
+        reviewers:
+          use: pr.reviewers
+          with: {pr: $pr.number, since: 30d}
+        page:
+          use: chat.post
+          with: {channel: build, text: "HOTFIX needs review now: $pr.url ($ticket.title)"}
+    need: all
+
+  wait:
+    wait: 1h
+    max: 8
+
+  check:
+    use: pr.status
+    with: {pr: $pr.number}
+    route: {quiet: nudge, comments: address, approved: merge}
+
+  nudge:
+    use: chat.post
+    with: {channel: build, text: "Still waiting on hotfix review: $pr.url"}
+    next: wait
+
+  address:
+    use: pr.comments
+    with: {pr: $pr.number}
+    route: {approved: merge, pending: wait}
+
+  merge:
+    gate: confirm
+    run: gh pr merge $pr.number --squash --delete-branch
+
+  # Ship the same image that was measured on the demo box.
+  prod:
+    gate: confirm
+    run: |
+      docker save $vars.image:hotfix-$ticket.id | ssh $vars.prod docker load
+      ssh $vars.prod "deploy $vars.image:hotfix-$ticket.id"
+    undo: ssh $vars.prod "deploy --previous"
+
+  verify:
+    run: ssh $vars.prod healthcheck
+    timeout: 10m
+    route: {fail: undo-prod, inconclusive: undo-prod}
+    next: end
+
+  undo-demo:
+    revert: demo
+    next: fail
+
+  undo-prod:
+    revert: prod
+    next: fail

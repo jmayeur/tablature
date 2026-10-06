@@ -1,0 +1,32 @@
+tab: 0.1
+name: fix
+about: Make a worktree from main, fix the ticket red-green, and run the full test suite.
+
+inputs:
+  ticket: {type: string}
+  branch: {type: string, ask: optional}
+  test:   {type: string, default: make test}
+
+vars:
+  branch: $inputs.branch ?? $inputs.ticket
+  dir:    .worktrees/$inputs.ticket
+
+out:
+  worktree: $vars.dir
+  branch:   $vars.branch
+
+steps:
+  worktree:
+    run: git fetch origin main && git worktree add -b $vars.branch $vars.dir origin/main
+    guard: test -d $vars.dir
+
+  build:
+    in: $vars.dir
+    do: Fix $inputs.ticket red-green. Stop when the new tests pass.
+    max: 3
+
+  test:
+    in: $vars.dir
+    run: $inputs.test
+    timeout: 30m
+    route: {fail: build, inconclusive: build}

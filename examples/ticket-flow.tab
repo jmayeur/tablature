@@ -1,0 +1,99 @@
+tab: 0.1
+name: ticket-flow
+about: Take one ticket from intake to merged PR, with review follow-up.
+
+actions: ./actions.yaml
+
+inputs:
+  ticket: {type: string, ask: optional}
+
+requires:
+  tools: [git, gh]
+
+rules:
+  - Write a failing test before each change (red-green).
+  - Code comments use Simplified Technical English (ASD-STE100).
+
+track:
+  ticket: $ticket.id
+  via: ticket.move
+  status: {fix: In Progress, pr: In Review, merge: Done}
+
+steps:
+  intake:
+    if: empty($inputs.ticket)
+    ask: No ticket given. Enter an id, or create a new ticket?
+    options: [enter, create]
+    route: {enter: enter, create: title}
+    next: find
+
+  enter:
+    ask: Ticket id?
+    out: {answer: string}
+    next: find
+
+  title:
+    ask: Title for the new ticket?
+    out: {answer: string}
+
+  create:
+    use: ticket.create
+    with: {title: $title.answer}
+    as: ticket
+    next: claim
+
+  find:
+    use: ticket.get
+    with: {id: "$inputs.ticket ?? $enter.answer"}
+    as: ticket
+
+  claim:
+    use: ticket.claim
+    with: {id: $ticket.id}
+
+  fix:
+    tab: ./fix.tab
+    with: {ticket: $ticket.id}
+
+  pr:
+    in: $fix.worktree
+    gate: confirm
+    run: |
+      git push -u origin HEAD
+      gh pr create --fill
+      gh pr view --json number,url > "$TAB_OUT"
+    out: {number: int, url: string}
+
+  self-review:
+    use: pr.review
+    with: {pr: $pr.number}
+
+  self-comments:
+    use: pr.comments
+    with: {pr: $pr.number}
+
+  reviewers:
+    use: pr.reviewers
+    with: {pr: $pr.number, since: 30d}
+
+  notify:
+    use: chat.post
+    with: {channel: build, text: "Review please: $pr.url ($ticket.title)"}
+    max: 5
+
+  wait:
+    wait: 24h
+
+  check:
+    use: pr.status
+    with: {pr: $pr.number}
+    route: {quiet: notify, comments: address, approved: merge}
+
+  address:
+    use: pr.comments
+    with: {pr: $pr.number}
+    route: {approved: merge, pending: notify}
+
+  merge:
+    gate: confirm
+    run: gh pr merge $pr.number --squash --delete-branch

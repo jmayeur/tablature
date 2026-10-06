@@ -1,0 +1,32 @@
+tab: 0.1
+name: pr-follow-up
+actions: ./actions.yaml
+about: Nudge reviewers daily until the PR is approved, then merge.
+
+inputs:
+  pr: {type: int, ask: required}
+
+steps:
+  notify:
+    use: chat.post
+    with: {channel: build, text: "Review please: PR $inputs.pr"}
+    max: 5
+
+  wait:
+    wait: 24h
+
+  check:
+    use: pr.status
+    with: {pr: $inputs.pr}
+    out: {verdict: [quiet, comments, approved]}
+    route: {quiet: notify, comments: address, approved: merge}
+
+  address:
+    use: pr.comments
+    with: {pr: $inputs.pr}
+    interactive: true
+    next: notify
+
+  merge:
+    gate: confirm
+    run: gh pr merge $inputs.pr --squash

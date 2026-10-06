@@ -1,0 +1,62 @@
+tab-actions: 0.1
+about: "Team bindings. A tab says `use: chat.post`. This file says how it runs."
+
+# Change one line here to swap the integration. The tabs stay the same.
+actions:
+
+  # Jira through the Atlassian MCP server.
+  ticket.get:
+    mcp: atlassian/getJiraIssue
+    with: {cloudId: $env.JIRA_CLOUD_ID, issueIdOrKey: $with.id}
+    pick: {id: key, title: fields.summary}
+    out: {id: string, title: string}
+    effect: none
+
+  ticket.create:
+    mcp: atlassian/createJiraIssue
+    with: {cloudId: $env.JIRA_CLOUD_ID, projectKey: $env.JIRA_PROJECT, issueTypeName: Task, summary: $with.title}
+    pick: {id: key, title: fields.summary}
+    out: {id: string, title: string}
+
+  ticket.claim:
+    mcp: atlassian/editJiraIssue
+    with: {cloudId: $env.JIRA_CLOUD_ID, issueIdOrKey: $with.id, fields: {assignee: {accountId: $env.JIRA_ACCOUNT_ID}}}
+    effect: idempotent
+
+  # Jira wants a transition id, not a status name. An agent step finds it.
+  ticket.move:
+    do: Move Jira issue $with.id to status "$with.status". Use the Atlassian MCP tools.
+    effect: idempotent
+
+  # GitHub through skills and scripts.
+  pr.review:
+    skill: github-pr-review
+    with: {pr: $with.pr}
+
+  pr.comments:
+    skill: github-pr-comments
+    with: {pr: $with.pr}
+    interactive: true
+    out: {verdict: [approved, pending]}
+    effect: idempotent
+
+  pr.status:
+    script: ./scripts/pr-status.sh
+    out: {verdict: [quiet, comments, approved], open: int}
+    effect: none
+
+  pr.reviewers:
+    script: ./scripts/recent-authors.sh
+    out: {added: list}
+    effect: idempotent
+
+  # Google Chat through a webhook script.
+  chat.post:
+    script: ./scripts/gchat-post.sh
+    requires: {env: [GCHAT_BUILD_WEBHOOK]}
+
+  # Demo box sampling through a skill.
+  demo.sample:
+    skill: demo-sample
+    out: {stats: object}
+    effect: none
